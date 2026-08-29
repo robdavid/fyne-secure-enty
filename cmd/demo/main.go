@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"unicode/utf8"
+	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -16,7 +16,7 @@ func main() {
 	a := app.New()
 	w := a.NewWindow("SecureEntry Demo")
 
-	entry := secureentry.NewSecureEntry(32 * utf8.UTFMax)
+	entry := secureentry.NewSecureEntry(32)
 	entry.SetPlaceHolder("Enter a password...")
 
 	status := widget.NewLabel("")
@@ -33,6 +33,7 @@ func main() {
 		copy(buf, b)
 		entry.Erase()
 		status.SetText(fmt.Sprintf("processed %d bytes: %x (input erased)", len(buf), buf))
+		os.Stdout.Write(buf)
 		clear(buf)
 	})
 

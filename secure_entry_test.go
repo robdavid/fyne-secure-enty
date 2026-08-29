@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -125,8 +126,12 @@ func TestMaxLenOverflowDropsRunes(t *testing.T) {
 	if e.RuneCount() != 4 {
 		t.Fatalf("RuneCount() = %d, want 4", e.RuneCount())
 	}
-	if cap(e.buffer) != 4 {
-		t.Fatalf("buffer capacity changed to %d, want 4", cap(e.buffer))
+	expectedCap := 4 * utf8.UTFMax
+	if e.maxRunes != 4 {
+		t.Fatalf("max runes is %d, expected 4", e.maxRunes)
+	}
+	if cap(e.buffer) != expectedCap {
+		t.Fatalf("buffer capacity changed to %d, want %d", cap(e.buffer), expectedCap)
 	}
 }
 

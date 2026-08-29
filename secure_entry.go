@@ -43,6 +43,7 @@ type SecureEntry struct {
 	buffer    []byte
 	count     int
 	runeCount int
+	maxRunes  int
 
 	maskRune rune
 
@@ -68,12 +69,13 @@ var (
 // NewSecureEntry creates a SecureEntry with an input buffer of maxLen bytes.
 // The buffer is allocated once and never reallocated; it is the only location
 // in which the user's input is ever stored.
-func NewSecureEntry(maxLen int) *SecureEntry {
-	if maxLen < 0 {
-		maxLen = 0
+func NewSecureEntry(maxRunes int) *SecureEntry {
+	if maxRunes < 0 {
+		maxRunes = 0
 	}
 	e := &SecureEntry{
-		buffer:   make([]byte, maxLen),
+		buffer:   make([]byte, maxRunes*utf8.UTFMax),
+		maxRunes: maxRunes,
 		maskRune: DefaultMaskRune,
 	}
 	e.ExtendBaseWidget(e)
@@ -162,6 +164,7 @@ func (e *SecureEntry) FocusLost() {
 // is encoded into a stack array and copied into the fixed buffer; no string is
 // ever constructed.
 func (e *SecureEntry) TypedRune(r rune) {
+	defer func() { r = 0 }()
 	if e.Disabled() || r == 0 {
 		return
 	}
@@ -214,16 +217,19 @@ func (e *SecureEntry) requestFocus() {
 // insert appends the UTF-8 encoding of r to the buffer. It reports whether the
 // rune was accepted, which is false when the buffer cannot hold it.
 func (e *SecureEntry) insert(r rune) bool {
-	if e.count == len(e.buffer) {
+	if e.count >= len(e.buffer) || e.runeCount >= e.maxRunes {
 		return false
 	}
-	var enc [utf8.UTFMax]byte
+	var enc [utf8.UTFMax]byte // Stack allocated. Good.
 	n := utf8.EncodeRune(enc[:], r)
 	end := e.count + n
 	if end > len(e.buffer) {
 		return false
 	}
 	copy(e.buffer[e.count:], enc[:n])
+	for i := range enc {
+		enc[i] = 0
+	}
 	e.count = end
 	e.runeCount++
 	if e.OnChanged != nil {
