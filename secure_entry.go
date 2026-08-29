@@ -15,6 +15,12 @@
 //   - Call Erase() once the input has been processed to wipe the buffer from
 //     memory.
 //
+// The memory guarantee above is a contract, not a mechanism: the widget can
+// only scrub the buffer it owns. Orphaning the widget without calling Erase(),
+// or keeping an un-cleared copy of Bytes(), reintroduces uncleared content, as
+// do transient rune copies in the input driver and OS-level buffers (IME,
+// swap, core dumps), which are outside the widget's reach.
+//
 // Editing is intentionally minimal (append-only): characters can be appended
 // and the last rune can be removed with Backspace. Cursor navigation, text
 // selection and the clipboard (paste/copy/cut/select-all) and undo/redo are
@@ -66,9 +72,11 @@ var (
 	_ desktop.Cursorable  = (*SecureEntry)(nil)
 )
 
-// NewSecureEntry creates a SecureEntry with an input buffer of maxLen bytes.
-// The buffer is allocated once and never reallocated; it is the only location
-// in which the user's input is ever stored.
+// NewSecureEntry creates a SecureEntry that accepts up to maxRunes characters.
+// The backing buffer is allocated once as maxRunes*utf8.UTFMax bytes and never
+// reallocated; it is the only location in which the user's input is ever
+// stored. The byte capacity is a multiple of no fewer than UTFMax bytes, so the
+// maximum number of runes can be held regardless of their UTF-8 width.
 func NewSecureEntry(maxRunes int) *SecureEntry {
 	if maxRunes < 0 {
 		maxRunes = 0
@@ -221,15 +229,15 @@ func (e *SecureEntry) insert(r rune) bool {
 		return false
 	}
 	var enc [utf8.UTFMax]byte // Stack allocated. Good.
+	// Zero the temporary encoding on every path so a rejected rune cannot
+	// linger on the stack.
+	defer func() { clear(enc[:]) }()
 	n := utf8.EncodeRune(enc[:], r)
 	end := e.count + n
 	if end > len(e.buffer) {
 		return false
 	}
 	copy(e.buffer[e.count:], enc[:n])
-	for i := range enc {
-		enc[i] = 0
-	}
 	e.count = end
 	e.runeCount++
 	if e.OnChanged != nil {
